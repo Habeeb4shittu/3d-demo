@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Three.js GLB Viewer</title>
+    <title>Three.js Multi-Model GLB Viewer</title>
     <style>
         body {
             margin: 0;
@@ -39,6 +39,19 @@
             padding: 10px;
             border-radius: 8px;
             font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .model-item {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .model-item.active {
+            background: rgba(74, 144, 226, 0.6);
         }
 
         .loading {
@@ -107,6 +120,36 @@
             animation: pulse 1.5s infinite;
         }
 
+        .loading-progress {
+            position: absolute;
+            top: 60%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            min-width: 300px;
+            text-align: center;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #4a90e2;
+            border-radius: 2px;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+
         @keyframes pulse {
             0% {
                 transform: scale(1);
@@ -128,29 +171,58 @@
 
     <div class="controls-info">
         <strong>Controls:</strong><br>
-        • Click and Hold: Zoom in<br>
-        • Hold + Move Mouse: Rotate camera<br>
-        • Mouse Move (no click): Model follows mouse<br>
-        • R Key: Reset camera position
+        • Click and Hold: Zoom into model under cursor<br>
+        • Hold + Move Mouse: Rotate camera around model<br>
+        • Mouse Move (no click): All models follow mouse<br>
+        • R Key: Reset to overview position
     </div>
 
-    <div class="model-info">
-        <strong>Model:</strong> <span id="model-name">Default Cube</span><br>
-        <strong>Status:</strong> <span id="model-status">Ready</span>
+    <div class="model-info" id="model-info">
+        <strong>Models:</strong><br>
+        <div class="model-item" data-model="brandenburg">
+            <div><strong>Brandenburg Gate</strong></div>
+            <div>Status: <span class="status">Loading...</span></div>
+        </div>
+        <div class="model-item" data-model="model2">
+            <div><strong>Model 2</strong></div>
+            <div>Status: <span class="status">Loading...</span></div>
+        </div>
+        <div class="model-item" data-model="model3">
+            <div><strong>Model 3</strong></div>
+            <div>Status: <span class="status">Loading...</span></div>
+        </div>
+        <div class="model-item" data-model="model4">
+            <div><strong>Model 4</strong></div>
+            <div>Status: <span class="status">Loading...</span></div>
+        </div>
     </div>
 
     <div class="cursor-indicator" id="cursor-indicator"></div>
-    <div class="zoom-indicator" id="zoom-indicator">Press & Hold</div>
-    <div class="loading" id="loading">Loading GLB model...</div>
+    <div class="zoom-indicator" id="zoom-indicator">Zoom Target: None</div>
+    <div class="loading" id="loading">Loading all models...</div>
+    <div class="loading-progress" id="loading-progress">
+        <div>Loading Models: <span id="progress-text">0/4</span></div>
+        <div class="progress-bar">
+            <div class="progress-fill" id="progress-fill"></div>
+        </div>
+    </div>
     <div class="error" id="error"></div>
 
-    <!-- Load Three.js and GLTFLoader -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/"
+        }
+    }
+    </script>
 
     <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+
         // Scene setup
-        import { MeshoptDecoder } from 'https://unpkg.com/three@0.179.0/examples/jsm/libs/meshopt_decoder.module.js';
         const canvas = document.getElementById('three-canvas');
         const scene = new THREE.Scene();
 
@@ -220,9 +292,9 @@
         const sky = new THREE.Mesh(skyGeometry, skyMaterial);
         scene.add(sky);
 
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        // Set default front view position
-        camera.position.set(0, 2, 8);
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+        // Set at a good distance for overview of all models
+        camera.position.set(0, 35, 100);
 
         const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -241,10 +313,10 @@
         directionalLight.shadow.mapSize.height = 2048;
         directionalLight.shadow.camera.near = 0.5;
         directionalLight.shadow.camera.far = 100;
-        directionalLight.shadow.camera.left = -20;
-        directionalLight.shadow.camera.right = 20;
-        directionalLight.shadow.camera.top = 20;
-        directionalLight.shadow.camera.bottom = -20;
+        directionalLight.shadow.camera.left = -50;
+        directionalLight.shadow.camera.right = 50;
+        directionalLight.shadow.camera.top = 50;
+        directionalLight.shadow.camera.bottom = -50;
         scene.add(directionalLight);
 
         // Add a subtle rim light to enhance the sky feel
@@ -252,8 +324,8 @@
         rimLight.position.set(-10, 5, -10);
         scene.add(rimLight);
 
-        // Ground plane - more natural grass-like color
-        const groundGeometry = new THREE.PlaneGeometry(100, 100);
+        // Ground plane - much larger to accommodate the new scale
+        const groundGeometry = new THREE.PlaneGeometry(500, 500);
         const groundMaterial = new THREE.MeshLambertMaterial({
             color: 0x567d46,  // Grass green
             transparent: true,
@@ -264,32 +336,217 @@
         ground.receiveShadow = true;
         scene.add(ground);
 
-        // Default cube (will be replaced when GLB is loaded)
-        let currentModel = new THREE.Mesh(
-            new THREE.BoxGeometry(2, 2, 2),
-            new THREE.MeshStandardMaterial({ color: 0xe74c3c })
-        );
-        currentModel.castShadow = true;
-        currentModel.position.y = 1;
-        scene.add(currentModel);
+        // Model definitions with positions - scattered line formation like a street
+        const modelDefinitions = {
+            brandenburg: {
+                name: 'Brandenburg Gate',
+                path: './models/uploads_files_220328_Churche_Frauenkirche_Munich.glb',
+                position: new THREE.Vector3(-50, 0, 5), // Left side, slightly forward
+                model: null,
+                loaded: false,
+                boundingBox: null
+            },
+            model2: {
+                name: 'Model 2',
+                path: './models/uploads_files_220328_Churche_Frauenkirche_Munich.glb',
+                position: new THREE.Vector3(-10, 0, -3), // Left-center, slightly back
+                model: null,
+                loaded: false,
+                boundingBox: null
+            },
+            model3: {
+                name: 'Model 3',
+                path: './models/brandenburgGateOp.glb',
+                position: new THREE.Vector3(10, 0, 4), // Right-center, slightly forward
+                model: null,
+                loaded: false,
+                boundingBox: null
+            },
+            model4: {
+                name: 'Model 4',
+                path: './models/Frauenkirche_Munich_-_View_from_Peterskirche_Tower2_op.glb',
+                position: new THREE.Vector3(30, 0, -2), // Right side, slightly back
+                model: null,
+                loaded: false,
+                boundingBox: null
+            }
+        };
 
-        // Camera and model control variables
+        // Camera and control variables
         let isMouseDown = false;
         let mouseStartPos = { x: 0, y: 0 };
         let currentMousePos = { x: 0, y: 0 };
-        let cameraTarget = new THREE.Vector3(0, 1, 0);
-        let defaultCameraPos = new THREE.Vector3(0, 2, 8);
-        let baseCameraDistance = 8;  // Base distance (100%)
-        let currentCameraDistance = 8;
-        let zoomStartDistance = 8; // Distance when zoom starts
-        let cameraAngleX = 0;
-        let cameraAngleY = 0.2;
-        let modelRotationX = 0;
-        let modelRotationY = 0;
+        let defaultCameraPos = new THREE.Vector3(0, 35, 100);
+        let cameraTarget = new THREE.Vector3(0, 8, 0);
+        let activeModel = null; // Currently focused model for zoom
+        let zoomStartDistance = 20;
         let isZooming = false;
-        let zoomProgress = 0;  // 0 = no zoom, 1 = full 45% zoom
+        let zoomProgress = 0;
+        let cameraAngleX = 0;
+        let cameraAngleY = 0.3;
 
         const cursorIndicator = document.getElementById('cursor-indicator');
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        // Progress tracking
+        let loadedModels = 0;
+        const totalModels = 4;
+
+        function updateProgress() {
+            loadedModels++;
+            const progress = (loadedModels / totalModels) * 100;
+            document.getElementById('progress-text').textContent = `${loadedModels}/${totalModels}`;
+            document.getElementById('progress-fill').style.width = `${progress}%`;
+
+            if (loadedModels === totalModels) {
+                setTimeout(() => {
+                    document.getElementById('loading-progress').style.display = 'none';
+                }, 500);
+            }
+        }
+
+        // Create fallback models for failed loads
+        function createFallbackModel(position, color = 0xe74c3c, modelDef) {
+            const geometry = new THREE.BoxGeometry(2, 2, 2);
+            const material = new THREE.MeshStandardMaterial({ color });
+            const model = new THREE.Mesh(geometry, material);
+            model.castShadow = true;
+            model.position.copy(position);
+            model.position.y = 1;
+            model.userData.rootModel = modelDef; // Add the reference
+            return model;
+        }
+
+        // Initialize GLTF Loader with Meshopt support
+        const loader = new GLTFLoader();
+
+        // Set up Meshopt decoder - this is crucial for compressed GLB files
+        loader.setMeshoptDecoder(MeshoptDecoder);
+
+        // GLB Loading function
+        function loadGLBModel(modelKey) {
+            const modelDef = modelDefinitions[modelKey];
+            if (!modelDef) return;
+
+            loader.load(
+                modelDef.path,
+                function (gltf) {
+                    modelDef.model = gltf.scene;
+                    modelDef.loaded = true;
+
+                    if (modelKey === 'brandenburg') {
+                        modelDef.model.rotation.z = -Math.PI / 2;
+                    }
+
+
+                    // Enable shadows for all meshes
+                    modelDef.model.traverse(function (child) {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                            child.userData.rootModelDef = modelDef; // <--- The new line
+                            if (child.material) {
+                                child.material.needsUpdate = true;
+                            }
+                        }
+                    });
+
+                    scene.add(modelDef.model);
+
+                    // Calculate bounding box and position model
+                    const box = new THREE.Box3().setFromObject(modelDef.model);
+                    modelDef.center = box.getCenter(new THREE.Vector3());
+                    modelDef.boundingBox = box;
+                    const size = box.getSize(new THREE.Vector3());
+
+                    // Scale down large models if needed
+                    const maxSize = Math.max(size.x, size.y, size.z);
+                    const minSize = Math.min(size.x, size.y, size.z);
+
+                    if (minSize < 5) {
+                        const scaleUp = 2 / minSize;
+                        modelDef.model.scale.setScalar(scaleUp);
+                    }
+
+                    if (maxSize > 15) { // If model is larger than 15 units
+                        const scale = 15 / maxSize;
+                        modelDef.model.scale.setScalar(scale);
+                    }
+
+                    // Position model on ground at designated position with slight random rotation
+                    modelDef.model.position.copy(modelDef.position);
+                    modelDef.model.position.y = -box.min.y * (modelDef.model.scale.x || 1);
+
+                    // Add slight random rotation to make it look more natural
+                    modelDef.model.rotation.y = (Math.random() - 0.5) * 0.3;
+
+                    // Update UI
+                    const modelItem = document.querySelector(`[data-model="${modelKey}"] .status`);
+                    if (modelItem) modelItem.textContent = 'Ready';
+
+                    updateProgress();
+                    console.log(`GLB model ${modelKey} loaded successfully`);
+                },
+                function (progress) {
+                    // Optional: Update individual model progress
+                    if (progress.lengthComputable) {
+                        const percent = (progress.loaded / progress.total) * 100;
+                        console.log(`Loading ${modelKey}: ${percent.toFixed(1)}%`);
+                    }
+                },
+                function (error) {
+                    console.error(`GLB loading error for ${modelKey}:`, error);
+
+                    // Create fallback model
+                    const colors = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf39c12]; // Different colors for each fallback
+                    const colorIndex = Object.keys(modelDefinitions).indexOf(modelKey);
+                    const fallbackModel = createFallbackModel(modelDef.position, colors[colorIndex]);
+
+                    modelDef.model = fallbackModel;
+                    modelDef.loaded = true;
+                    scene.add(fallbackModel);
+
+                    // Update UI
+                    const modelItem = document.querySelector(`[data-model="${modelKey}"] .status`);
+                    if (modelItem) modelItem.textContent = 'Fallback';
+
+                    updateProgress();
+                }
+            );
+        }
+
+        // Find which model is under the mouse cursor
+        function getModelUnderMouse(mouseX, mouseY) {
+            mouse.x = (mouseX / window.innerWidth) * 2 - 1;
+            mouse.y = -(mouseY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+
+            const models = Object.values(modelDefinitions)
+                .filter(def => def.model)
+                .map(def => def.model);
+
+            const intersects = raycaster.intersectObjects(models, true);
+
+            if (intersects.length > 0) {
+                const hitObject = intersects[0].object;
+                // Check if the hit object has the tag we added earlier.
+                if (hitObject.userData.rootModelDef) {
+                    const modelDef = hitObject.userData.rootModelDef;
+                    // Now find the corresponding key in modelDefinitions
+                    for (const [key, def] of Object.entries(modelDefinitions)) {
+                        if (def === modelDef) {
+                            return key;
+                        }
+                    }
+                }
+            }
+
+            return null;
+        }
+
+
 
         // Mouse event handlers
         canvas.addEventListener('mousedown', (event) => {
@@ -297,19 +554,27 @@
             isMouseDown = true;
             mouseStartPos.x = event.clientX;
             mouseStartPos.y = event.clientY;
-            currentMousePos.x = event.clientX;
-            currentMousePos.y = event.clientY;
 
-            // Capture current camera distance as zoom start point
-            const currentCamPos = camera.position.clone();
-            const distanceToTarget = currentCamPos.distanceTo(cameraTarget);
-            zoomStartDistance = distanceToTarget;
+            // Determine which model to zoom into
+            activeModel = getModelUnderMouse(event.clientX, event.clientY);
+            console.log(activeModel);
 
-            // Reset and start zooming
-            zoomProgress = 0;  // Reset zoom progress
+
+            if (activeModel) {
+                const modelDef = modelDefinitions[activeModel];
+                const currentCamPos = camera.position.clone();
+                const modelCenter = modelDef.position.clone();
+                modelCenter.y += 2; // Adjust for model height
+                zoomStartDistance = currentCamPos.distanceTo(modelCenter);
+
+                // Update UI
+                document.getElementById('zoom-indicator').textContent = `Zooming: ${modelDef.name}`;
+                document.querySelector(`[data-model="${activeModel}"]`).classList.add('active');
+            }
+
+            zoomProgress = 0;
             isZooming = true;
             document.getElementById('zoom-indicator').style.opacity = '1';
-            document.getElementById('zoom-indicator').textContent = 'Zooming...';
             cursorIndicator.classList.add('active');
             canvas.style.cursor = 'zoom-in';
         });
@@ -321,9 +586,14 @@
             cursorIndicator.classList.remove('active');
             canvas.style.cursor = 'crosshair';
 
-            // Reset zoom when releasing - return to front view
+            // Clear active model highlight
+            document.querySelectorAll('.model-item').forEach(item => {
+                item.classList.remove('active');
+            });
+
+            // Reset zoom
             zoomProgress = 0;
-            currentCameraDistance = baseCameraDistance;
+            activeModel = null;
         });
 
         canvas.addEventListener('mousemove', (event) => {
@@ -334,66 +604,67 @@
             cursorIndicator.style.left = (event.clientX - 30) + 'px';
             cursorIndicator.style.top = (event.clientY - 30) + 'px';
 
-            if (isMouseDown) {
-                // Camera rotation while holding
+            if (isMouseDown && activeModel) {
+                // Camera rotation around active model while holding
                 const deltaX = event.clientX - mouseStartPos.x;
                 const deltaY = event.clientY - mouseStartPos.y;
 
                 cameraAngleX = deltaX * 0.01;
-                cameraAngleY = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, 0.2 - deltaY * 0.01));
+                cameraAngleY = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, 0.3 - deltaY * 0.01));
 
                 updateCameraPosition();
                 canvas.style.cursor = 'move';
-            } else {
-                // Model follows mouse when not holding
+            } else if (!isMouseDown) {
+                // All models follow mouse when not holding
                 const rect = canvas.getBoundingClientRect();
                 const mouseX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
                 const mouseY = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
-                // Subtle model rotation based on mouse position
-                modelRotationX = mouseY * 0.2;
-                modelRotationY = mouseX * 0.3;
-
-                if (currentModel) {
-                    currentModel.rotation.x = modelRotationX;
-                    currentModel.rotation.y = modelRotationY;
-                }
+                // Apply rotation to all loaded models
+                Object.values(modelDefinitions).forEach(def => {
+                    if (def.model) {
+                        def.model.rotation.x = mouseY * 0.1;
+                        def.model.rotation.y = mouseX * 0.15;
+                    }
+                });
 
                 canvas.style.cursor = 'crosshair';
             }
         });
 
-        // Zoom effect while holding mouse - limited to 45% from current position
+        // Zoom effect
         function updateZoom() {
-            if (isZooming && isMouseDown) {
-                // Gradual zoom to 45% from the starting distance
-                zoomProgress = Math.min(zoomProgress + 0.025, 1); // Limit to 1 (45% zoom)
-
-                // Calculate zoom distance starting from wherever the camera currently is
-                const zoomFactor = 1 - (zoomProgress * 0.45); // 1.0 to 0.55 (45% closer)
-                currentCameraDistance = zoomStartDistance * zoomFactor;
-
+            if (isZooming && isMouseDown && activeModel) {
+                zoomProgress = Math.min(zoomProgress + 0.02, 1);
                 updateCameraPosition();
             }
         }
 
         // Camera position update
         function updateCameraPosition() {
-            if (isMouseDown) {
-                // Orbital camera movement
-                const x = currentCameraDistance * Math.cos(cameraAngleY) * Math.cos(cameraAngleX);
-                const y = currentCameraDistance * Math.sin(cameraAngleY) + cameraTarget.y;
-                const z = currentCameraDistance * Math.cos(cameraAngleY) * Math.sin(cameraAngleX);
+            if (isMouseDown && activeModel) {
+                const modelDef = modelDefinitions[activeModel];
+                const targetPos = modelDef.position.clone();
+                targetPos.y += 2;
+
+                // Zoom closer to the active model
+                const zoomFactor = 1 - (zoomProgress * 0.88); // Zoom in up to 85% closer
+                const currentDistance = zoomStartDistance * zoomFactor;
+
+                // Orbital camera movement around the active model
+                const x = currentDistance * Math.cos(cameraAngleY) * Math.cos(cameraAngleX);
+                const y = currentDistance * Math.sin(cameraAngleY) + targetPos.y;
+                const z = currentDistance * Math.cos(cameraAngleY) * Math.sin(cameraAngleX);
 
                 camera.position.set(
-                    cameraTarget.x + x,
+                    targetPos.x + x,
                     y,
-                    cameraTarget.z + z
+                    targetPos.z + z
                 );
-                camera.lookAt(cameraTarget);
-            } else {
-                // Return to front view when not interacting
-                camera.position.lerp(defaultCameraPos, 0.05);
+                camera.lookAt(targetPos);
+            } else if (!isMouseDown) {
+                // Return to overview position
+                camera.position.lerp(defaultCameraPos, 0.02);
                 camera.lookAt(cameraTarget);
             }
         }
@@ -401,102 +672,47 @@
         // Reset function
         document.addEventListener('keydown', (event) => {
             if (event.key.toLowerCase() === 'r') {
-                baseCameraDistance = 8;
-                currentCameraDistance = 8;
-                cameraAngleX = 0;
-                cameraAngleY = 0.2;
-                cameraTarget.set(0, 1, 0);
-                defaultCameraPos.set(0, 2, 8);
-                modelRotationX = 0;
-                modelRotationY = 0;
-                zoomProgress = 0;
-
-                if (currentModel) {
-                    currentModel.rotation.x = 0;
-                    currentModel.rotation.y = 0;
-                }
-
                 camera.position.copy(defaultCameraPos);
                 camera.lookAt(cameraTarget);
+                cameraAngleX = 0;
+                cameraAngleY = 0.3;
+                zoomProgress = 0;
+                activeModel = null;
+
+                // Reset all model rotations
+                Object.values(modelDefinitions).forEach(def => {
+                    if (def.model) {
+                        def.model.rotation.x = 0;
+                        def.model.rotation.y = 0;
+                    }
+                });
+
+                // Clear UI highlights
+                document.querySelectorAll('.model-item').forEach(item => {
+                    item.classList.remove('active');
+                });
             }
         });
 
-        // GLB Loading function
-        function loadGLBModel(url) {
-            document.getElementById('loading').style.display = 'block';
-            document.getElementById('model-status').textContent = 'Loading...';
-            document.getElementById('error').style.display = 'none';
+        // Load all models after setting up the decoder
+        async function initializeViewer() {
+            try {
+                // Wait for MeshoptDecoder to be ready
+                await MeshoptDecoder.ready;
+                console.log('MeshoptDecoder initialized successfully');
 
-            const loader = new THREE.GLTFLoader();
-            loader.setMeshoptDecoder(MeshoptDecoder);
-
-            loader.load(
-                url,
-                function (gltf) {
-                    // Remove previous model
-                    if (currentModel) {
-                        scene.remove(currentModel);
-                    }
-
-                    currentModel = gltf.scene;
-
-                    // Enable shadows for all meshes
-                    currentModel.traverse(function (child) {
-                        if (child.isMesh) {
-                            child.castShadow = true;
-                            child.receiveShadow = true;
-
-                            // Ensure materials work with our lighting
-                            if (child.material) {
-                                child.material.needsUpdate = true;
-                            }
-                        }
-                    });
-
-                    scene.add(currentModel);
-
-                    // Auto-frame the model
-                    const box = new THREE.Box3().setFromObject(currentModel);
-                    const center = box.getCenter(new THREE.Vector3());
-                    const size = box.getSize(new THREE.Vector3());
-                    const maxSize = Math.max(size.x, size.y, size.z);
-
-                    // Position model on ground
-                    currentModel.position.y = -box.min.y;
-
-                    // Update camera target and default position
-                    cameraTarget.copy(center);
-                    cameraTarget.y += size.y * 0.2;
-
-                    const optimalDistance = maxSize * 2.5;
-                    baseCameraDistance = optimalDistance;
-                    currentCameraDistance = optimalDistance;
-                    defaultCameraPos.set(0, cameraTarget.y + size.y * 0.1, optimalDistance);
-
-                    camera.position.copy(defaultCameraPos);
-                    camera.lookAt(cameraTarget);
-
-                    document.getElementById('loading').style.display = 'none';
-                    document.getElementById('model-status').textContent = 'Loaded';
-                    document.getElementById('model-name').textContent = url.split('/').pop();
-
-                    console.log('GLB model loaded successfully');
-                },
-                function (progress) {
-                    console.log('Loading progress:', (progress.loaded / progress.total * 100) + '%');
-                },
-                function (error) {
-                    document.getElementById('loading').style.display = 'none';
-                    document.getElementById('error').style.display = 'block';
-                    document.getElementById('error').textContent = `Error loading GLB: ${error.message}. Make sure the file path is correct and the file is accessible.`;
-                    document.getElementById('model-status').textContent = 'Error';
-                    console.error('GLB loading error:', error);
-                }
-            );
+                // Now load all models
+                Object.keys(modelDefinitions).forEach(key => {
+                    loadGLBModel(key);
+                });
+            } catch (error) {
+                console.error('Failed to initialize MeshoptDecoder:', error);
+                // Fallback: still try to load models (non-compressed ones might work)
+                Object.keys(modelDefinitions).forEach(key => {
+                    loadGLBModel(key);
+                });
+            }
         }
-
-        // Load your GLB file
-        loadGLBModel('./models/brandenburg_gate_germany_op.glb');
 
         // Animation loop
         function animate() {
@@ -511,15 +727,14 @@
             updateZoom();
 
             // Smooth camera transitions
-            if (!isMouseDown) {
-                updateCameraPosition();
-            }
+            updateCameraPosition();
 
             renderer.render(scene, camera);
         }
 
-        // Initialize
+        // Initialize everything
         camera.lookAt(cameraTarget);
+        initializeViewer();
         animate();
 
         // Resize handling
@@ -528,9 +743,6 @@
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
-
-        // Initial UI update
-        document.getElementById('model-status').textContent = 'Default cube loaded';
     </script>
 </body>
 
